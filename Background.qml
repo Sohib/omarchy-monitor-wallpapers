@@ -15,7 +15,12 @@ Item {
   readonly property string currentBackgroundLink: stateHome + "/omarchy/current/background"
 
   property string currentBackground: ""
-  readonly property string portraitBackground: home + "/.config/omarchy/backgrounds/tokyo-night/winding-road-portrait-2160x3840.jpg"
+  property string portraitBackground: home + "/.config/omarchy/backgrounds/tokyo-night/winding-road-portrait-2160x3840.jpg"
+  readonly property string portraitCacheDir: stateHome + "/omarchy/backgrounds"
+  property string requestedPortraitSource: ""
+  property string renderingPortraitSource: ""
+  property string renderingPortraitOutput: ""
+  property int nextPortraitSlot: 0
   property string displayedBackground: ""
   property string incomingBackground: ""
   property string oldBackground: ""
@@ -35,6 +40,19 @@ Item {
     return screenName === "DP-3" ? portraitBackground : fallback
   }
 
+  function queuePortraitBackground(path) {
+    requestedPortraitSource = String(path || "").trim()
+    if (requestedPortraitSource && !portraitProc.running) renderRequestedPortrait()
+  }
+
+  function renderRequestedPortrait() {
+    if (!requestedPortraitSource || portraitProc.running) return
+    renderingPortraitSource = requestedPortraitSource
+    renderingPortraitOutput = portraitCacheDir + "/dp-3-" + nextPortraitSlot + ".jpg"
+    nextPortraitSlot = (nextPortraitSlot + 1) % 2
+    portraitProc.running = true
+  }
+
   function refreshBackground() {
     if (!readlinkProc.running) readlinkProc.running = true
   }
@@ -49,6 +67,7 @@ Item {
     fromPath = String(fromPath || "").trim()
     if (!path || (!force && finalPath === currentBackground)) return
     currentBackground = finalPath
+    queuePortraitBackground(finalPath)
     backgroundVersion += 1
     revealStartedVersion = -1
 
@@ -126,10 +145,32 @@ Item {
   }
 
   Process {
+    id: portraitProc
+    command: [
+      "bash",
+      "-c",
+      "read -r width height < <(identify -format '%w %h' \"$1\"); if (( width > height )); then magick \"$1\" -auto-orient -rotate 90 -resize '2160x3840^' -gravity center -extent 2160x3840 \"$2\"; else magick \"$1\" -auto-orient -resize '2160x3840^' -gravity center -extent 2160x3840 \"$2\"; fi",
+      "omarchy-portrait-background",
+      root.renderingPortraitSource,
+      root.renderingPortraitOutput
+    ]
+    onExited: {
+      if (root.requestedPortraitSource === root.renderingPortraitSource)
+        root.portraitBackground = root.renderingPortraitOutput
+      if (root.requestedPortraitSource !== root.renderingPortraitSource)
+        root.renderRequestedPortrait()
+    }
+  }
+
+  Process {
     id: readlinkProc
     command: ["readlink", "-f", root.currentBackgroundLink]
     stdout: StdioCollector {
-      onStreamFinished: root.setBackground(String(text || "").trim(), false)
+      onStreamFinished: {
+        const path = String(text || "").trim()
+        root.setBackground(path, false)
+        root.queuePortraitBackground(path)
+      }
     }
   }
 
