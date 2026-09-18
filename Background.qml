@@ -15,6 +15,7 @@ Item {
   readonly property string currentBackgroundLink: stateHome + "/omarchy/current/background"
 
   property string currentBackground: ""
+  readonly property string portraitBackground: home + "/.config/omarchy/backgrounds/tokyo-night/winding-road-portrait-2160x3840.jpg"
   property string displayedBackground: ""
   property string incomingBackground: ""
   property string oldBackground: ""
@@ -28,6 +29,10 @@ Item {
 
   function imageUrl(path) {
     return Util.fileUrl(path)
+  }
+
+  function backgroundForScreen(screenName, fallback) {
+    return screenName === "DP-3" ? portraitBackground : fallback
   }
 
   function refreshBackground() {
@@ -203,6 +208,10 @@ Item {
 
       property bool maskReady: false
 
+      readonly property string wallpaperPath: root.backgroundForScreen(String(modelData.name || ""), root.displayedBackground)
+      readonly property string oldWallpaperPath: root.backgroundForScreen(String(modelData.name || ""), root.oldBackground)
+      readonly property string incomingWallpaperPath: root.backgroundForScreen(String(modelData.name || ""), root.incomingBackground)
+
       function maybeStartReveal() {
         if (!root.incomingBackground || root.revealProgress !== 0 || maskReady) return
         if (incomingFrame.status !== Image.Ready) return
@@ -221,7 +230,7 @@ Item {
       Image {
         id: base
         anchors.fill: parent
-        source: root.imageUrl(root.displayedBackground)
+        source: root.imageUrl(panel.wallpaperPath)
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         cache: true
@@ -237,7 +246,7 @@ Item {
       Image {
         id: oldFrame
         anchors.fill: parent
-        source: root.imageUrl(root.oldBackground)
+        source: root.imageUrl(panel.oldWallpaperPath)
         fillMode: Image.PreserveAspectCrop
         asynchronous: true
         cache: false
@@ -263,7 +272,7 @@ Item {
         Image {
           id: incomingFrame
           anchors.fill: parent
-          source: root.imageUrl(root.incomingBackground)
+          source: root.imageUrl(panel.incomingWallpaperPath)
           fillMode: Image.PreserveAspectCrop
           asynchronous: true
           cache: false
