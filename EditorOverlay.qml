@@ -102,9 +102,9 @@ Item {
     widthPx = r.widthPx || canvas().width
     heightPx = r.heightPx || canvas().height
     var defaultFolder = Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/backgrounds"
-    folder = folderByMonitor[selectedMonitor] || (imagePath ? imagePath.substring(0, imagePath.lastIndexOf("/")) : defaultFolder)
+    folder = folderByMonitor[selectedMonitor] || defaultFolder
     refreshImages()
-    if (imagePath) selectImage(imagePath)
+    prepareSelection()
   }
   function pickerResult(value) {
     var path = String(value || "")

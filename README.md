@@ -85,7 +85,7 @@ omarchy-shell shell summon suhayb.background
 You can also double-left-click an unobstructed desktop background. Double-right-click retains the native theme selector.
 
 1. Choose the target monitor from the dropdown or monitor overview.
-2. Choose an image or folder, or use the theme's image thumbnails.
+2. Browse Omarchy's current theme wallpapers (`~/.local/state/omarchy/current/theme/backgrounds`) by default, even when the saved image is elsewhere. Choose an image or folder explicitly to browse another location; that folder is remembered per monitor for the session.
 3. Pick a sizing mode, rotation, and position. Custom width and height are independent physical-pixel values, each from 1 to 32768.
 4. Use **Use recommendation** if desired; recommendations never silently change your selected mode.
 5. Select **Preview on desktop** to inspect the wallpaper without saving. The editor collapses to a countdown bar; **End preview** returns to the editor, and timeout restores the committed wallpaper automatically.
