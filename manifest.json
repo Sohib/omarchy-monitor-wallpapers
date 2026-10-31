@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "id": "suhayb.background",
-  "name": "My Background",
+  "name": "Omarchy Monitor Wallpapers",
   "version": "1.0.0",
   "author": "Omarchy",
-  "description": "Desktop background renderer with click handling and transitions",
+  "description": "Native per-monitor wallpapers for Omarchy: image selection, fit, stretch, rotation and desktop previews",
   "kinds": [
     "service",
     "overlay"

@@ -1,111 +1,107 @@
-# Omarchy Wallpaper Editor
+# Omarchy Monitor Wallpapers
 
-A native per-monitor wallpaper editor for Omarchy's Quickshell desktop. Choose independent images, adjust their sizing and position, rotate them, and preview changes before saving—without installing a separate wallpaper renderer.
+**Different wallpapers for every monitor. Native to Omarchy.**
 
-Built as a user-owned clone of `omarchy.background`. Plugin ID: **`suhayb.background`**.
+A per-monitor wallpaper manager for **Omarchy, Hyprland, and Quickshell**. Browse your theme's wallpapers, fine-tune fit and rotation, and preview changes on the desktop before saving. No separate wallpaper daemon.
+
+[Install](#install) · [Usage](#usage) · [Sizing modes](#sizing-modes) · [Troubleshooting](#troubleshooting) · [Development](#development)
+
+![Omarchy Monitor Wallpapers: library, monitor preview, and adjustment controls](docs/images/editor.png)
 
 ## Features
 
-- Independent wallpaper and draft settings for each monitor, identified by connector name.
-- **Fill**, **Fit**, **Stretch**, **Original size**, and **Custom size** in physical pixels.
-- Image-only clockwise rotation in 90° steps; monitor configuration is never changed.
-- Nine-position alignment for crops and black borders.
-- Fill/Fit recommendations based on aspect ratio, with crop/border percentages and enlargement warnings.
-- Folder thumbnails and manual Previous/Next navigation; no slideshow.
-- In-editor preview plus a temporary **20-second desktop preview** with an unobtrusive countdown bar.
-- Atomic settings persistence, external-change conflict detection, and last-good image fallback.
-- Native shared-wallpaper and theme-transition integration.
+- **One image per monitor** — independent settings keyed by connector name.
+- **Pixel-accurate sizing** — Fill, Fit, Stretch, Original size, and custom physical-pixel dimensions.
+- **Non-destructive adjustment** — 90° image rotation and nine-position alignment; source images remain unchanged.
+- **Helpful recommendations** — Fill/Fit suggestions, crop or border percentages, and enlargement warnings.
+- **Omarchy wallpaper library** — defaults to the current theme directory; choose your own image or folder when needed.
+- **Preview before saving** — in-editor preview plus a reversible, 20-second desktop preview.
+- **Native integration** — preserves Omarchy's shared-wallpaper and theme-transition workflow.
 
-## Requirements
+> [!IMPORTANT]
+> This plugin replaces Omarchy's native background service through its clone mechanism. Do not run it alongside another wallpaper renderer. It requires Omarchy's native shell modules; it is not a standalone Quickshell configuration.
 
-- Omarchy with its native Quickshell shell and plugin manager.
-- Hyprland and `hyprctl`.
-- Python 3, ImageMagick (`magick` and `identify`), and Zenity.
-- Git for installation; Node.js only for running the tests.
+## Install
 
-The plugin uses Omarchy's `qs.Commons` and `qs.Ui` components. It is **not a standalone Quickshell configuration** and is not intended for arbitrary Hyprland distributions.
+### Requirements
 
-Check dependencies before installation:
+Omarchy's native Quickshell shell and plugin manager, Hyprland, Python 3, ImageMagick, Zenity, and Git.
 
 ```bash
 command -v omarchy omarchy-shell hyprctl python3 magick identify zenity git
 ```
 
-No dependency installation is performed automatically. Image preparation needs ImageMagick; the editor reports a missing dependency rather than installing packages.
+Install any missing dependencies using your normal package-management workflow. The plugin never installs packages automatically. Node.js is needed only for development tests.
 
-## Install
-
-### Using Omarchy's plugin manager
+### Add and enable
 
 ```bash
-omarchy plugin add https://github.com/Sohib/omarchy-wallpaper-editor.git
+omarchy plugin add https://github.com/Sohib/omarchy-monitor-wallpapers.git
 omarchy plugin enable suhayb.background
 ```
 
-For a private GitHub repository, authenticate Git first and use an SSH URL:
+The stable plugin ID is **`suhayb.background`**. The name shown in Omarchy is **Omarchy Monitor Wallpapers**. Enabling the clone disables its built-in source, `omarchy.background`.
 
-```bash
-omarchy plugin add git@github.com:Sohib/omarchy-wallpaper-editor.git
-omarchy plugin enable suhayb.background
-```
-
-Enabling this clone replaces the built-in `omarchy.background` through Omarchy's clone mechanism. **Do not enable another wallpaper renderer alongside it.** Review other wallpaper services before installing.
-
-If a plugin with the same ID is already installed, do not overwrite its directory. Back up its source and settings and use the development workflow below, or update the existing installation.
-
-### Development checkout
-
-Keep the source checkout separate from the installed copy. Omarchy's validator rejects symlinked plugin folders.
-
-```bash
-mkdir -p ~/Documents/projects ~/.config/omarchy/plugins
-git clone git@github.com:Sohib/omarchy-wallpaper-editor.git ~/Documents/projects/omarchy-wallpaper-editor
-cd ~/Documents/projects/omarchy-wallpaper-editor
-mkdir -p ~/.config/omarchy/plugins/suhayb.background
-tar --exclude=.git -cf - . | tar -xf - -C ~/.config/omarchy/plugins/suhayb.background
-omarchy plugin validate ~/.config/omarchy/plugins/suhayb.background
-omarchy-shell shell rescanPlugins
-omarchy plugin enable suhayb.background
-```
-
-Use an empty installation directory for the first copy. Back up any existing installation before replacing it. The project checkout is the source of truth; edits there are not automatically installed.
-
-After source changes, repeat the copy and validation steps, then restart the shell:
-
-```bash
-omarchy restart shell
-```
-
-## Open and use
+Open the editor:
 
 ```bash
 omarchy-shell shell summon suhayb.background
 ```
 
-You can also double-left-click an unobstructed desktop background. Double-right-click retains the native theme selector.
+Or double-left-click an unobstructed desktop background. Double-right-click retains the native theme selector.
 
-1. Choose the target monitor from the dropdown or monitor overview.
-2. Browse Omarchy's current theme wallpapers (`~/.local/state/omarchy/current/theme/backgrounds`) by default, even when the saved image is elsewhere. Choose an image or folder explicitly to browse another location; that folder is remembered per monitor for the session.
-3. Pick a sizing mode, rotation, and position. Custom width and height are independent physical-pixel values, each from 1 to 32768.
-4. Use **Use recommendation** if desired; recommendations never silently change your selected mode.
-5. Select **Preview on desktop** to inspect the wallpaper without saving. The editor collapses to a countdown bar; **End preview** returns to the editor, and timeout restores the committed wallpaper automatically.
-6. Select **Apply** to save only the selected monitor. The editor stays open after a confirmed save.
+> [!NOTE]
+> If the same plugin ID is already installed, back up the existing source before replacing it. Do not overwrite an installation containing uncommitted local edits.
 
-**Cancel**, Escape, or closing the editor discards unsaved drafts and cancels temporary preview. Choosing a file temporarily hides the overlay without discarding your draft; cancelling the chooser preserves it.
+## Usage
 
-**Use theme wallpaper** clears the independent image for the selected monitor so it follows Omarchy's shared wallpaper. Existing per-monitor sizing and rotation controls remain available.
+1. **Select a monitor.** Use the dropdown or monitor-layout overview.
+2. **Choose a wallpaper.** Browse the theme library, use Previous/Next, or select a custom image or folder.
+3. **Adjust the composition.** Pick sizing, rotate the image, and choose its position. Recommendations are optional and never change your mode automatically.
+4. **Preview on desktop.** The editor collapses to a small countdown bar. End the preview to return, or let it expire after 20 seconds.
+5. **Apply.** Saves only the selected monitor and keeps the editor open for further comparisons.
 
-Original size and Custom size require verified physical monitor metadata. When that metadata is unavailable, the editor disables those modes for Apply; Fit, Fill, and Stretch can still use screen aspect ratio.
+Cancel, Escape, or closing the editor discards unsaved drafts and clears desktop preview. File pickers temporarily hide the overlay without discarding the draft; cancelling a picker preserves it.
 
-## Settings and cache
+Choose **Reset to theme wallpaper** to clear an independent image and follow Omarchy's shared wallpaper. Sizing and rotation remain available per monitor.
 
-Settings are stored only in:
+### Wallpaper library
+
+The default directory is:
 
 ```text
-~/.config/omarchy/background-editor.json
+~/.local/state/omarchy/current/theme/backgrounds
 ```
 
-Example:
+Use **Theme wallpapers** to return the library to this directory without changing the selected image.
+
+A saved image outside that directory does not redirect the browser. Explicitly choosing another image or folder changes the browsing location, remembered per monitor for the session. The browser lists readable PNG, JPEG, and WebP files directly inside the folder, sorted by filename. It does not recurse. Unreadable images are marked and skipped by navigation.
+
+### Sizing modes
+
+| Mode | Result |
+| --- | --- |
+| Fill | Covers the monitor; crops excess image area. |
+| Fit | Shows the entire image; adds black borders where needed. |
+| Stretch | Fills the monitor without preserving proportions. |
+| Original size | Uses the image's intrinsic physical-pixel dimensions. |
+| Custom size | Uses independent width and height, each from 1 to 32768 physical pixels. |
+
+Position controls move the image within its canvas, affecting either borders or cropping. Rotation is image-only, clockwise, in 90° steps; monitor rotation, scale, position, and resolution are never changed.
+
+Original/Custom Apply requires verified physical monitor metadata. If unavailable, the UI explains the limitation; Fill, Fit, and Stretch still use screen aspect ratio.
+
+<details>
+<summary>Screenshot: portrait monitor and fit recommendation</summary>
+
+![Portrait monitor preview showing Fill cropping and a Fit recommendation](docs/images/portrait.png)
+
+</details>
+
+<details>
+<summary>Settings, persistence, and cache</summary>
+
+Settings: `~/.config/omarchy/background-editor.json`
 
 ```json
 {
@@ -124,108 +120,103 @@ Example:
 }
 ```
 
-`image: null` follows the shared wallpaper. Connector names are exact identities: disconnected records are retained, but renamed connectors are not automatically matched. Rotation is image-only and clockwise; supported values are 0, 90, 180, and 270.
+`image: null` follows the shared wallpaper. Connector names are exact identities: disconnected records are retained, but renamed connectors are not automatically matched.
 
-Prepared images live under `~/.cache/omarchy/wallpaper-editor/`. Sources are never edited or resized on disk. EXIF orientation is applied before requested rotation. Cache eviction retains 32 recent entries where possible while protecting images leased by live frames.
+Writes use guarded atomic replacement. Malformed settings retain the last valid in-memory state. External valid edits do not silently discard an open draft: reopen the editor to reload before applying.
 
-The browser lists immediate readable PNG, JPEG, and WebP files, sorted by filename. It does not recurse into folders. Corrupt thumbnails are marked unreadable and excluded from navigation.
+Prepared images: `~/.cache/omarchy/wallpaper-editor/`. EXIF orientation is applied before requested rotation. Source files are never modified. Eviction retains 32 recent entries where possible and protects images leased by live frames.
 
-### Legacy portrait migration
+**Legacy migration:** if settings are absent and `~/.config/omarchy/backgrounds/tokyo-night/winding-road-portrait-2160x3840.jpg` is readable, DP-3 uses that existing derivative with Fill and rotation 0. It is never rotated again. Otherwise outputs follow the shared wallpaper and the editor shows a nonblocking notice. Other wallpaper plugins' settings are not imported.
 
-When the settings file is absent, this clone recognizes the original author's existing derivative at:
+</details>
 
-```text
-~/.config/omarchy/backgrounds/tokyo-night/winding-road-portrait-2160x3840.jpg
-```
+## Update or remove
 
-If readable, it initializes `DP-3` with that image, Fill, centered position, and **rotation 0**. The derivative is not rotated again. Otherwise monitors follow the shared wallpaper and a nonblocking migration notice is shown. No settings from other wallpaper plugins are imported.
-
-## Update
-
-For a development checkout:
-
-```bash
-cd ~/Documents/projects/omarchy-wallpaper-editor
-git pull --ff-only
-tar --exclude=.git -cf - . | tar -xf - -C ~/.config/omarchy/plugins/suhayb.background
-omarchy plugin validate ~/.config/omarchy/plugins/suhayb.background
-omarchy restart shell
-```
-
-For an installation managed by Omarchy:
+For a plugin-manager installation:
 
 ```bash
 omarchy plugin update suhayb.background
 ```
 
-Commit or back up local source edits before updating.
-
-## Disable or uninstall
-
-Return background ownership to Omarchy's built-in renderer:
+Return ownership to the built-in renderer:
 
 ```bash
 omarchy plugin disable suhayb.background
-```
-
-Omarchy's clone mechanism restores the source plugin when the clone is disabled. Confirm the result with:
-
-```bash
 omarchy-shell shell listPlugins
 ```
 
-For a plugin-manager installation, removal is available after disabling:
+After disabling, remove the installed plugin if desired:
 
 ```bash
 omarchy plugin remove suhayb.background
 ```
 
-The same plugin-manager removal command can remove a manually installed copy. Keep the separate project checkout if you want to continue development.
-
-Your project checkout, image sources, settings, and cache are separate. Back up settings before intentionally resetting them. Do not remove source images to uninstall the plugin.
+Source images, settings, cache, and a separate development checkout are independent. Back up settings before intentionally resetting them; never delete source images to uninstall the plugin.
 
 ## Troubleshooting
 
-| Problem | What to check |
+| Problem | Check |
 | --- | --- |
-| Editor does not open | Confirm `suhayb.background` is enabled, run `omarchy plugin validate <checkout>`, then `omarchy restart shell`. |
-| `background editorState` is not found | The clone is not loaded, or another renderer owns that IPC target. Check plugin ownership first. |
-| Image cannot be prepared | Check that the source still exists and is readable, and that `magick` and `identify` are installed. |
-| Settings are refused | Check for malformed JSON, unsupported schema versions, a symlink at the settings path, wrong ownership, or a file larger than 64 KiB. The last valid in-memory settings are retained. |
-| Settings changed externally | Close and reopen the editor to reload. Unsaved drafts are not silently overwritten; Apply stays disabled while conflicted. |
-| Wallpaper is not visible | Windows cover the background layer. Test on an empty workspace. |
-| Original/Custom unavailable | Inspect `hyprctl monitors -j`; the plugin requires physical dimensions consistent with Qt's logical screen size and scale. |
+| Editor does not open | Confirm the plugin is enabled, validate its folder, then restart the shell. |
+| `background editorState` not found | The clone is not loaded, or another renderer owns the IPC target. Check ownership. |
+| Image cannot be prepared | Check source readability and the `magick` and `identify` executables. |
+| Settings refused | Check JSON/schema, ownership, symlinks, and the 64 KiB size limit. Last-good settings remain in memory. |
+| Settings changed externally | Close and reopen the editor. Apply stays disabled while the draft is conflicted. |
+| Desktop preview not visible | Application windows cover the wallpaper layer. Use an empty workspace to inspect it. |
+| Original/Custom disabled | Check physical dimensions, transform, and scale in `hyprctl monitors -j`. |
 
-Read current committed state and monitor metadata:
+Useful diagnostics:
 
 ```bash
+omarchy-shell shell listPlugins
 omarchy-shell background editorState
+omarchy plugin validate ~/.config/omarchy/plugins/suhayb.background
+omarchy restart shell
 ```
 
-## Development and verification
+Still stuck? [Open an issue](https://github.com/Sohib/omarchy-monitor-wallpapers/issues) with your Omarchy version, monitor dimensions/scale, and reproduction steps. Remove private paths before sharing logs.
+
+## Development
+
+Keep the Git checkout separate from the installed copy. **Omarchy rejects symlinked plugin folders.**
 
 ```bash
-cd ~/Documents/projects/omarchy-wallpaper-editor
+mkdir -p ~/Documents/projects
+git clone https://github.com/Sohib/omarchy-monitor-wallpapers.git ~/Documents/projects/omarchy-monitor-wallpapers
+cd ~/Documents/projects/omarchy-monitor-wallpapers
+node --test tests/*.test.js
+```
+
+Install into an empty directory, or back up an existing installation first:
+
+```bash
+mkdir -p ~/.config/omarchy/plugins/suhayb.background
+tar --exclude=.git -cf - . | tar -xf - -C ~/.config/omarchy/plugins/suhayb.background
+omarchy plugin validate ~/.config/omarchy/plugins/suhayb.background
+omarchy-shell shell rescanPlugins
+omarchy plugin enable suhayb.background
+omarchy restart shell
+```
+
+After `git pull --ff-only` or local source edits, repeat the copy, validation, and restart steps. Checkout edits are not automatically installed.
+
+### Checks
+
+```bash
 node --test tests/*.test.js
 python3 -m py_compile scripts/editor-io.py
 omarchy plugin validate .
 ```
 
-The EXIF regression test additionally uses `exiv2` and skips when it is unavailable. Image-preparation tests require ImageMagick.
-
-Behavioral checks cover geometry, schema validation, guarded persistence, immutable preparation, EXIF/rotation ordering, filename transport, and cache leases. Native runtime verification has included live landscape/portrait previews, Apply and restart persistence, isolated corrupt-image recovery, external config conflicts, and virtual-output topology changes. Automated tests do not replace visual verification on your own output layout.
-
-## Project layout
+Image tests require ImageMagick; the EXIF test also requires `exiv2` and skips when unavailable. Tests cover geometry, validation, guarded persistence, image preparation, EXIF/rotation ordering, filename transport, and cache leases. Visual verification on your output layout is still necessary.
 
 | File | Responsibility |
 | --- | --- |
-| `Background.qml` | Native service, per-monitor state, IPC, preview timeout, transitions. |
-| `EditorOverlay.qml` | Omarchy-styled editor and picker lifecycle. |
-| `WallpaperFrame.qml` | Shared physical-pixel rendering geometry and prepared-image lifecycle. |
-| `Model.js` | Pure layout, recommendation, and validation functions. |
-| `scripts/editor-io.py` | Guarded settings I/O, image discovery, preparation, and cache. |
-| `tests/` | Node-driven model and helper behavior tests. |
+| `Background.qml` | Native service, per-monitor state, IPC, transitions, and preview timer. |
+| `EditorOverlay.qml` | Editor UI, draft state, and picker lifecycle. |
+| `WallpaperFrame.qml` | Shared physical-pixel rendering and image lifecycle. |
+| `Model.js` | Pure geometry, recommendation, and validation. |
+| `scripts/editor-io.py` | Guarded I/O, image discovery, preparation, and cache. |
+| `tests/` | Model and helper behavioral tests. |
 
-## Attribution
-
-Derived from Omarchy's native `omarchy.background` plugin. Native shell components and theme behavior belong to the [Omarchy project](https://github.com/basecamp/omarchy). This repository preserves the cloned plugin's provenance and local development history. It is an independent customization, not an official Omarchy plugin.
+Derived from [Omarchy](https://github.com/basecamp/omarchy)'s native `omarchy.background` plugin. The clone provenance and local development history are preserved, along with the [upstream license](LICENSE). Independent customization; not an official Omarchy plugin. Wallpaper artwork shown in screenshots belongs to its respective creators.
