@@ -6,10 +6,12 @@
   "author": "Omarchy",
   "description": "Desktop background renderer with click handling and transitions",
   "kinds": [
-    "service"
+    "service",
+    "overlay"
   ],
   "entryPoints": {
-    "service": "Background.qml"
+    "service": "Background.qml",
+    "overlay": "EditorOverlay.qml"
   },
   "omarchy": {
     "clonedFrom": "omarchy.background"
