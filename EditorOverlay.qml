@@ -378,6 +378,12 @@ Item {
               radius: Style.cornerRadius
               color: modelData === root.selectedMonitor ? Style.selectedFillFor(Commons.Color.foreground, Commons.Color.accent) : Commons.Color.popups.background
               border.color: modelData === root.selectedMonitor ? Commons.Color.accent : Commons.Color.popups.border
+              activeFocusOnTab: true
+              Accessible.name: "Edit wallpaper for " + modelData
+              Accessible.role: Accessible.Button
+              border.width: activeFocus || modelData === root.selectedMonitor ? 2 : 1
+              Keys.onReturnPressed: root.selectMonitor(modelData)
+              Keys.onSpacePressed: root.selectMonitor(modelData)
               Text { anchors.centerIn: parent; text: parent.modelData; color: Commons.Color.foreground; font.pixelSize: Style.font.caption }
               MouseArea {
                 anchors.fill: parent
@@ -395,7 +401,7 @@ Item {
           rowSpacing: 16
           ColumnLayout {
             Layout.preferredWidth: 280; Layout.fillWidth: card.width < 960; Layout.maximumWidth: card.width < 960 ? Infinity : 280; Layout.minimumWidth: 240; Layout.fillHeight: true
-            PanelSectionHeader { text: "LIBRARY" }
+            PanelSectionHeader { text: "Library" }
             RowLayout {
               Button {
                 focusable: true
@@ -423,18 +429,19 @@ Item {
                 enabled: root.readableImageCount > 1
                 onClicked: root.navigate(1)
               }
-              Button {
-                text: "Theme wallpapers"
-                focusable: true
-                tooltipText: "Browse the current Omarchy theme's wallpapers"
-                onClicked: root.chooseFolder(Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/backgrounds")
-              }
+            }
+            Button {
+              text: "Theme wallpapers"
+              focusable: true
+              tooltipText: "Browse the current Omarchy theme's wallpapers"
+              onClicked: root.chooseFolder(Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/backgrounds")
             }
             Text { text: root.folder.replace(Quickshell.env("HOME"), "~"); color: Qt.darker(Commons.Color.foreground, 1.4); font.pixelSize: Style.font.caption; elide: Text.ElideMiddle; Layout.fillWidth: true; Layout.minimumWidth: 0 }
             Text { visible: root.imageFiles.length === 0; text: "No images in this folder. Choose another folder."; color: Commons.Color.foreground; Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.WordWrap }
             GridView {
               id: gallery
-              Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; clip: true; cellWidth: 128; cellHeight: 100; model: root.imageFiles
+              Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; clip: true
+              cellWidth: width / Math.max(1, Math.floor(width / 128)); cellHeight: 112; model: root.imageFiles
               property bool keyboardNavigated: false
               activeFocusOnTab: true
               keyNavigationEnabled: true
@@ -447,12 +454,21 @@ Item {
               delegate: Item {
                 required property int index
                 required property string modelData
-                width: 124; height: 96
+                width: gallery.cellWidth - 4; height: gallery.cellHeight - 4
                 Image {
-                  anchors.fill: parent; source: Util.fileUrl(modelData); sourceSize: Qt.size(160, 120); fillMode: Image.PreserveAspectCrop; asynchronous: true
+                  anchors { top: parent.top; left: parent.left; right: parent.right; bottom: caption.top; bottomMargin: 4 }
+                  source: Util.fileUrl(modelData); sourceSize: Qt.size(160, 120); fillMode: Image.PreserveAspectCrop; asynchronous: true
                   onStatusChanged: if (status === Image.Error && !root.unreadable[modelData]) {
                     var copy = Object.assign({}, root.unreadable); copy[modelData] = true; root.unreadable = copy
                   }
+                }
+                Text {
+                  id: caption
+                  anchors { bottom: parent.bottom; left: parent.left; right: parent.right }
+                  text: (root.imagePath === modelData ? "✓ " : "") + modelData.substring(modelData.lastIndexOf("/") + 1)
+                  font.pixelSize: Style.font.caption
+                  color: root.imagePath === modelData ? Commons.Color.accent : Commons.Color.foreground
+                  elide: Text.ElideMiddle
                 }
                 Text { anchors.centerIn: parent; visible: !!root.unreadable[modelData]; text: "Can't open image"; color: Commons.Color.urgent; wrapMode: Text.WordWrap; width: parent.width; horizontalAlignment: Text.AlignHCenter }
                 Rectangle {
@@ -498,7 +514,7 @@ Item {
           }
           ColumnLayout {
             Layout.preferredWidth: 250; Layout.fillWidth: card.width < 960; Layout.maximumWidth: card.width < 960 ? Infinity : 250; Layout.minimumWidth: 210
-            PanelSectionHeader { text: "SIZING" }
+            PanelSectionHeader { text: "Sizing" }
             Dropdown { showLabel: false; Accessible.name: "Sizing"; options: [{value:"fill",label:"Fill"},{value:"fit",label:"Fit"},{value:"stretch",label:"Stretch"},{value:"original",label:"Original size"},{value:"custom",label:"Custom size"}]; value: root.mode; onChanged: function(v) { root.mode = String(v) } }
             Text { visible: (root.mode === "original" || root.mode === "custom") && root.canvas().physical !== true; text: "Physical monitor dimensions are unavailable; Original size and Custom size cannot be applied."; color: Commons.Color.urgent; Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.WordWrap }
             RowLayout {
@@ -510,13 +526,13 @@ Item {
             Text { visible: !!root.recommendation && root.recommendation.enlarged; text: "This image may look blurry when enlarged"; color: Commons.Color.urgent; Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.WordWrap }
             Button { text: "Use recommendation"; focusable: true; enabled: !!root.recommendation; onClicked: if (root.recommendation) root.mode = root.recommendation.mode }
             Text { visible: root.distorted; text: "This sizing changes the image proportions."; color: Commons.Color.urgent; Layout.fillWidth: true; Layout.minimumWidth: 0; wrapMode: Text.WordWrap }
-            PanelSectionHeader { text: "ROTATION" }
+            PanelSectionHeader { text: "Rotation" }
             RowLayout {
               Button { text: "Rotate left"; focusable: true; onClicked: { root.rotation = (root.rotation + 270) % 360; if (root.imagePath) root.selectImage(root.imagePath) } }
               Button { text: "Rotate right"; focusable: true; onClicked: { root.rotation = (root.rotation + 90) % 360; if (root.imagePath) root.selectImage(root.imagePath) } }
-              Text { visible: root.rotation !== 0; text: "Rotated " + root.rotation + "°"; color: Qt.darker(Commons.Color.foreground, 1.4); font.pixelSize: Style.font.caption }
             }
-            PanelSectionHeader { text: "POSITION" }
+            Text { text: root.rotation + "° clockwise"; color: Qt.darker(Commons.Color.foreground, 1.4); font.pixelSize: Style.font.caption }
+            PanelSectionHeader { text: "Position" }
             Repeater {
               model: [0, 1, 2]
               delegate: RowLayout {
@@ -543,7 +559,7 @@ Item {
           Button { text: "Preview on desktop"; focusable: true; enabled: !root.savePending && (!root.imagePath || root.selectionReady) && (["original", "custom"].indexOf(root.mode) < 0 || root.canvas().physical === true); onClicked: root.preview() }
           Item { Layout.fillWidth: true }
           Button { text: "Cancel"; focusable: true; onClicked: root.close() }
-          Button { text: root.savePending ? "Saving…" : "Apply"; focusable: true; active: true; foreground: enabled ? Commons.Color.foreground : Commons.Color.muted; enabled: !root.savePending && !root.settingsConflict && root.canvas().width > 0 && (!root.imagePath || root.selectionReady) && (["original", "custom"].indexOf(root.mode) < 0 || root.canvas().physical === true); onClicked: root.apply() }
+          Button { text: root.savePending ? "Saving…" : "Apply wallpaper"; focusable: true; active: true; foreground: enabled ? Commons.Color.foreground : Commons.Color.muted; enabled: !root.savePending && !root.settingsConflict && root.canvas().width > 0 && (!root.imagePath || root.selectionReady) && (["original", "custom"].indexOf(root.mode) < 0 || root.canvas().physical === true); onClicked: root.apply() }
         }
       }
       }

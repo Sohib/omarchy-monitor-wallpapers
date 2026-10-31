@@ -59,9 +59,11 @@ Or double-left-click an unobstructed desktop background. Double-right-click reta
 2. **Choose a wallpaper.** Browse the theme library, use Previous/Next, or select a custom image or folder.
 3. **Adjust the composition.** Pick sizing, rotate the image, and choose its position. Recommendations are optional and never change your mode automatically.
 4. **Preview on desktop.** The editor collapses to a small countdown bar. End the preview to return, or let it expire after 20 seconds.
-5. **Apply.** Saves only the selected monitor and keeps the editor open for further comparisons.
+5. **Apply wallpaper.** Saves only the selected monitor and keeps the editor open for further comparisons.
 
 Cancel, Escape, or closing the editor discards unsaved drafts and clears desktop preview. File pickers temporarily hide the overlay without discarding the draft; cancelling a picker preserves it.
+
+Thumbnail captions show filenames; a checkmark and accent border identify the chosen image. Tab to the gallery, use arrow keys to browse, and press Enter to select. Monitor tiles also support Tab and Enter or Space.
 
 Choose **Reset to theme wallpaper** to clear an independent image and follow Omarchy's shared wallpaper. Sizing and rotation remain available per monitor.
 
@@ -161,7 +163,7 @@ Source images, settings, cache, and a separate development checkout are independ
 | `background editorState` not found | The clone is not loaded, or another renderer owns the IPC target. Check ownership. |
 | Image cannot be prepared | Check source readability and the `magick` and `identify` executables. |
 | Settings refused | Check JSON/schema, ownership, symlinks, and the 64 KiB size limit. Last-good settings remain in memory. |
-| Settings changed externally | Close and reopen the editor. Apply stays disabled while the draft is conflicted. |
+| Settings changed externally | Close and reopen the editor. Apply wallpaper stays disabled while the draft is conflicted. |
 | Desktop preview not visible | Application windows cover the wallpaper layer. Use an empty workspace to inspect it. |
 | Original/Custom disabled | Check physical dimensions, transform, and scale in `hyprctl monitors -j`. |
 
