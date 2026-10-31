@@ -3,7 +3,7 @@
   "id": "suhayb.background",
   "name": "Omarchy Monitor Wallpapers",
   "version": "1.0.0",
-  "author": "Omarchy",
+  "author": "Sohib (based on Omarchy)",
   "description": "Native per-monitor wallpapers for Omarchy: image selection, fit, stretch, rotation and desktop previews",
   "kinds": [
     "service",
