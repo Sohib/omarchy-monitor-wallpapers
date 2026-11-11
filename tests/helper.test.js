@@ -101,3 +101,32 @@ test("EXIF orientation precedes requested clockwise rotation without altering th
     fs.rmSync(home, { recursive: true, force: true })
   }
 })
+
+test("video wallpapers are listed, thumbnailed, and prepared as preview frames", {
+  skip: !hasMagick || spawnSync("ffmpeg", ["-version"], { stdio: "ignore" }).status !== 0,
+}, () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "wallpaper-video-test-"))
+  const mediaDir = path.join(home, "media")
+  fs.mkdirSync(mediaDir, { recursive: true })
+  const video = path.join(mediaDir, "rain.mp4")
+  try {
+    assert.equal(spawnSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=blue:s=160x90:d=1", "-pix_fmt", "yuv420p", video]).status, 0)
+    const run = (...args) => spawnSync("python3", [helper, ...args], { encoding: "utf8", env: { ...process.env, HOME: home } })
+    const listed = run("images", mediaDir)
+    assert.equal(listed.status, 0, listed.stderr)
+    assert.deepEqual(JSON.parse(listed.stdout), [video])
+
+    const thumbs = run("thumbnails", mediaDir)
+    assert.equal(thumbs.status, 0, thumbs.stderr)
+    const parsedThumbs = JSON.parse(thumbs.stdout)
+    assert.ok(parsedThumbs.thumbnails[video] && fs.existsSync(parsedThumbs.thumbnails[video]))
+    assert.deepEqual(parsedThumbs.unreadable, [])
+
+    const prepared = run("prepare", video, "90")
+    assert.equal(prepared.status, 0, prepared.stderr)
+    const info = JSON.parse(prepared.stdout)
+    assert.deepEqual([info.width, info.height], [90, 160])
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+  }
+})

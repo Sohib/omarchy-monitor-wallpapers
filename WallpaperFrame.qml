@@ -7,6 +7,9 @@ Item {
   id: root
   property string source: ""
   property string originalSource: ""
+  property bool renderVideoPreview: false
+  readonly property string activeSource: originalSource || source
+  readonly property bool video: !renderVideoPreview && Util.isVideoPath(activeSource)
   property int rotation: 0
   property string preparedSource: ""
   property int preparedRotation: -1
@@ -26,11 +29,11 @@ Item {
   property string leaseOwner: ""
   property var leasePending: null
   signal ready()
-  readonly property bool imageReady: frameImage.status === Image.Ready
+  readonly property bool imageReady: !video && frameImage.status === Image.Ready
     && (!originalSource || rawFallback || (preparedSource === originalSource && preparedRotation === rotation))
   signal failed(string message)
   clip: true
-  Rectangle { anchors.fill: parent; color: "black" }
+  Rectangle { anchors.fill: parent; color: "black"; visible: !root.video && root.activeSource !== "" }
   readonly property var geometry: Model.layout(intrinsicWidth, intrinsicHeight, canvasWidth, canvasHeight, record)
   function updateLease(paths) {
     if (!leaseOwner) return
@@ -47,7 +50,7 @@ Item {
     leaseProcess.running = true
   }
   function prepare() {
-    if (!originalSource) { preparedPath = ""; prepareError = ""; rawFallback = false; updateLease(source ? [source] : []); return }
+    if (!originalSource || video) { preparedPath = ""; prepareError = ""; rawFallback = false; updateLease(source && !video ? [source] : []); return }
     if (prepareProcess.running) { prepareQueued = true; return }
     prepareQueued = false
     preparingSource = originalSource
@@ -95,12 +98,12 @@ Item {
     onExited: root.runLease()
   }
   onOriginalSourceChanged: prepare()
-  onSourceChanged: if (!originalSource) updateLease(source ? [source] : [])
+  onSourceChanged: if (!originalSource) updateLease(source && !video ? [source] : [])
   onRotationChanged: prepare()
   Component.onDestruction: updateLease([])
   Image {
     id: frameImage
-    source: Util.fileUrl(root.originalSource ? (root.rawFallback ? root.originalSource : root.preparedPath) : root.source)
+    source: root.video ? "" : Util.fileUrl(root.originalSource ? (root.rawFallback ? root.originalSource : root.preparedPath) : root.source)
     asynchronous: root.asynchronous
     cache: true
     smooth: true

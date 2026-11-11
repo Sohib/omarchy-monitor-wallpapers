@@ -32,6 +32,7 @@ Item {
   property bool gotInitialState: false
   property var prepared: ({ path: "", width: 0, height: 0 })
   property string sharedImage: ""
+  readonly property bool sharedIsVideo: Util.isVideoPath(sharedImage)
   property string preparedSource: ""
   property int preparedRotation: -1
   readonly property bool selectionReady: imagePath !== "" && preparedSource === imagePath
@@ -39,8 +40,11 @@ Item {
   property int preparingRotation: 0
   property string preparingPath: ""
   property string listingFolder: ""
+  property string thumbnailFolder: ""
   property bool prepareQueued: false
   property bool listQueued: false
+  property bool thumbnailQueued: false
+  property var videoThumbnails: ({})
   property var unreadable: ({})
   property var folderByMonitor: ({})
   property string errorText: ""
@@ -120,6 +124,13 @@ Item {
     listingFolder = folder
     listProcess.command = commandBase.concat(["images", listingFolder])
     listProcess.running = true
+  }
+  function refreshThumbnails() {
+    if (thumbnailProcess.running) { thumbnailQueued = true; return }
+    thumbnailQueued = false
+    thumbnailFolder = folder
+    thumbnailProcess.command = commandBase.concat(["thumbnails", thumbnailFolder])
+    thumbnailProcess.running = true
   }
   function chooseFolder(path) {
     folder = path
@@ -225,8 +236,10 @@ Item {
     stdout: StdioCollector { onStreamFinished: {
       try {
         var paths = JSON.parse(text)
-        if (root.listingFolder === root.folder) root.imageFiles = paths
-        else root.listQueued = true
+        if (root.listingFolder === root.folder) {
+          root.imageFiles = paths
+          if (paths.some(function(p) { return Util.isVideoPath(p) })) root.refreshThumbnails()
+        } else root.listQueued = true
       } catch (e) {
         if (root.listingFolder === root.folder) {
           root.imageFiles = []
@@ -237,6 +250,23 @@ Item {
     onExited: if (root.listQueued) root.refreshImages()
   }
   Process {
+    id: thumbnailProcess
+    stdout: StdioCollector { onStreamFinished: {
+      try {
+        var data = JSON.parse(text)
+        if (root.thumbnailFolder === root.folder) {
+          root.videoThumbnails = Object.assign({}, root.videoThumbnails, data.thumbnails || ({}))
+          if (data.unreadable && data.unreadable.length) {
+            var copy = Object.assign({}, root.unreadable)
+            for (var i = 0; i < data.unreadable.length; i++) copy[data.unreadable[i]] = true
+            root.unreadable = copy
+          }
+        } else root.thumbnailQueued = true
+      } catch (e) {}
+    } }
+    onExited: if (root.thumbnailQueued) root.refreshThumbnails()
+  }
+  Process {
     id: prepareProcess
     stdout: StdioCollector { onStreamFinished: {
       try {
@@ -245,6 +275,9 @@ Item {
         root.prepared = result
         root.preparedSource = root.imagePath
         root.preparedRotation = root.preparingRotation
+        if (root.preparingRotation === 0 && Util.isVideoPath(root.imagePath)) {
+          var thumbs = Object.assign({}, root.videoThumbnails); thumbs[root.imagePath] = result.path; root.videoThumbnails = thumbs
+        }
         var copy = Object.assign({}, root.unreadable); delete copy[root.imagePath]; root.unreadable = copy
         root.errorText = ""
       } catch (e) {
@@ -454,12 +487,33 @@ Item {
               delegate: Item {
                 required property int index
                 required property string modelData
+                readonly property bool isVideoItem: Util.isVideoPath(modelData)
+                readonly property string displaySource: isVideoItem ? (root.videoThumbnails[modelData] || "") : modelData
                 width: gallery.cellWidth - 4; height: gallery.cellHeight - 4
                 Image {
                   anchors { top: parent.top; left: parent.left; right: parent.right; bottom: caption.top; bottomMargin: 4 }
-                  source: Util.fileUrl(modelData); sourceSize: Qt.size(160, 120); fillMode: Image.PreserveAspectCrop; asynchronous: true
+                  source: parent.displaySource ? Util.fileUrl(parent.displaySource) : ""; sourceSize: Qt.size(160, 120); fillMode: Image.PreserveAspectCrop; asynchronous: true
                   onStatusChanged: if (status === Image.Error && !root.unreadable[modelData]) {
                     var copy = Object.assign({}, root.unreadable); copy[modelData] = true; root.unreadable = copy
+                  }
+                }
+                Rectangle {
+                  visible: parent.isVideoItem
+                  anchors { top: parent.top; right: parent.right; margins: 4 }
+                  radius: 4
+                  color: Qt.rgba(Commons.Color.background.r, Commons.Color.background.g, Commons.Color.background.b, 0.82)
+                  border.color: Commons.Color.popups.border
+                  border.width: 1
+                  implicitWidth: videoBadgeText.implicitWidth + 8
+                  implicitHeight: videoBadgeText.implicitHeight + 4
+                  Text {
+                    id: videoBadgeText
+                    anchors.centerIn: parent
+                    textFormat: Text.PlainText
+                    text: "VIDEO"
+                    font.pixelSize: Style.font.caption - 2
+                    font.bold: true
+                    color: Commons.Color.foreground
                   }
                 }
                 Text {
@@ -494,20 +548,40 @@ Item {
               Layout.fillWidth: true
               Layout.fillHeight: true
               WallpaperFrame {
+                id: stageFrame
                 anchors.centerIn: parent
                 width: root.canvas().width > 0 && root.canvas().height > 0
                   ? Math.min(parent.width, parent.height * root.canvas().width / root.canvas().height) : parent.width
                 height: root.canvas().width > 0 && root.canvas().height > 0
                   ? width * root.canvas().height / root.canvas().width : parent.height
                 leaseOwner: "editor"
-                source: (root.imagePath || root.rotation !== 0) ? "" : root.sharedImage
-                originalSource: root.imagePath || (root.rotation !== 0 ? root.sharedImage : "")
-                allowRawFallback: !root.imagePath
+                renderVideoPreview: true
+                source: (root.imagePath || root.rotation !== 0 || root.sharedIsVideo) ? "" : root.sharedImage
+                originalSource: root.imagePath || ((root.rotation !== 0 || root.sharedIsVideo) ? root.sharedImage : "")
+                allowRawFallback: !root.imagePath && !root.sharedIsVideo
                 rotation: root.rotation
                 canvasWidth: root.canvas().width
                 canvasHeight: root.canvas().height
                 record: root.record()
                 onFailed: root.errorText = "Could not open this image. Choose another image."
+                Rectangle {
+                  visible: Util.isVideoPath(stageFrame.activeSource)
+                  anchors { bottom: parent.bottom; right: parent.right; margins: 8 }
+                  radius: 4
+                  color: Qt.rgba(Commons.Color.background.r, Commons.Color.background.g, Commons.Color.background.b, 0.82)
+                  border.color: Commons.Color.popups.border
+                  border.width: 1
+                  implicitWidth: stageVideoText.implicitWidth + 12
+                  implicitHeight: stageVideoText.implicitHeight + 6
+                  Text {
+                    id: stageVideoText
+                    anchors.centerIn: parent
+                    textFormat: Text.PlainText
+                    text: "Video wallpaper"
+                    color: Commons.Color.foreground
+                    font.pixelSize: Style.font.caption
+                  }
+                }
               }
             }
             Text { text: root.selectionReady ? "Image: " + root.prepared.width + " × " + root.prepared.height + " px" : root.imagePath ? (prepareProcess.running ? "Preparing image…" : "Image is not prepared") : "Theme wallpaper"; color: Commons.Color.foreground; wrapMode: Text.WordWrap; Layout.fillWidth: true; Layout.minimumWidth: 0 }

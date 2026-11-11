@@ -12,6 +12,7 @@ import "Model.js" as Model
 Item {
   id: root
   property var shell: null
+  property bool suspended: false
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string stateHome: home + "/.local/state"
@@ -42,6 +43,18 @@ Item {
   property string pendingColorsRaw: ""
   property string pendingShellRaw: ""
   property real revealProgress: 1
+  readonly property bool ready: {
+    if (isVideo(displayedBackground)) return true
+    if (backgrounds.instances.length === 0) return false
+    for (var panel of backgrounds.instances) {
+      if (!panel.backgroundReady) return false
+    }
+    return true
+  }
+
+  function isVideo(path) {
+    return Util.isVideoPath(path)
+  }
 
   property var hyprOutputs: ({})
   function recordForScreen(screenName) {
@@ -53,6 +66,9 @@ Item {
     if (record.image && editorUnavailable[screenName] === record.image) {
       var lastGood = editorLastGood[screenName]
       return lastGood ? lastGood.path : fallback
+    }
+    if (record.image && isVideo(record.image) && !editorPreview[screenName] && !isVideo(currentBackground)) {
+      return fallback
     }
     return record.image || fallback
   }
@@ -113,11 +129,25 @@ Item {
       clearUnavailable(name)
       var errors = Object.assign({}, editorErrors); delete errors[name]; editorErrors = errors
       editorPreview = Object.assign({}, editorPreview, (function(){ var o={}; o[name]=record; return o })())
+      if (record.image && isVideo(record.image)) {
+        Util.execArgv(["ln", "-nsf", record.image, currentBackgroundLink])
+      }
       editorRevision++
       editorPreviewTimer.restart()
     } catch (e) { editorErrors = Object.assign({}, editorErrors, (function(){ var o={}; o[name]=String(e); return o })()); editorRevision++ }
   }
-  function cancelEditorPreview() { editorPreview = ({}); editorPreviewTimer.stop(); editorRevision++ }
+  function cancelEditorPreview() {
+    var hadVideoPreview = false
+    for (var key in editorPreview) {
+      if (editorPreview[key] && editorPreview[key].image && isVideo(editorPreview[key].image)) hadVideoPreview = true
+    }
+    editorPreview = ({})
+    editorPreviewTimer.stop()
+    if (hadVideoPreview && currentBackground) {
+      Util.execArgv(["ln", "-nsf", currentBackground, currentBackgroundLink])
+    }
+    editorRevision++
+  }
   function saveMonitor(name, json) {
     if (editorSaveProc.running || editorSaveQueued) return
     try {
@@ -140,19 +170,37 @@ Item {
     }
   }
   function refreshBackground() { if (!readlinkProc.running) readlinkProc.running = true }
-  function setBackground(path, instant) { transitionBackground("", path, path, instant, false) }
+  function setBackground(path, instant) { transitionBackground("", path, path, instant, instant) }
+  function setSuspended(value) {
+    suspended = !!value
+    if (suspended && isVideo(currentBackground) && displayedBackground !== currentBackground) {
+      videoHandoffTimer.stop()
+      revealAnimation.stop()
+      finishingTransition = false
+      oldBackground = ""
+      incomingBackground = ""
+      displayedBackground = currentBackground
+      revealProgress = 1
+    }
+  }
   function transitionBackground(fromPath, path, finalPath, instant, force) {
     path = String(path || "").trim()
     finalPath = String(finalPath || path).trim()
+    fromPath = String(fromPath || "").trim()
     if (!path || (!force && finalPath === currentBackground)) return
     if (finalPath !== currentBackground) cancelEditorPreview()
+    videoHandoffTimer.stop()
     currentBackground = finalPath
     backgroundVersion += 1
     revealStartedVersion = -1
+    if (!instant && !root.suspended && displayedBackground && isVideo(path) && !isVideo(displayedBackground)) {
+      videoHandoffTimer.restart()
+      return
+    }
     revealAnimation.stop()
     finishingTransition = false
-    if (instant || !displayedBackground) {
-      oldBackground = ""; incomingBackground = ""; displayedBackground = path; revealProgress = 1; return
+    if (instant || !displayedBackground || isVideo(path) || isVideo(displayedBackground)) {
+      oldBackground = ""; incomingBackground = ""; displayedBackground = finalPath; revealProgress = 1; return
     }
     oldBackground = fromPath || displayedBackground
     revealProgress = 0
@@ -280,11 +328,15 @@ Item {
     id: editorSaveProc
     onExited: function(exitCode) {
       if (exitCode === 0) {
+        var savedImage = root.editorPendingRecord ? root.editorPendingRecord.image : ""
         root.editorConfig = root.editorPendingConfig
         root.editorPreview = ({})
         editorPreviewTimer.stop()
-        clearUnavailable(root.editorPendingMonitor, root.editorPendingRecord.image)
+        clearUnavailable(root.editorPendingMonitor, savedImage)
         root.editorErrors = ({})
+        if (savedImage && root.isVideo(savedImage)) {
+          Util.execArgv(["omarchy-theme-bg-set", savedImage])
+        }
       } else root.editorErrors = Object.assign({}, root.editorErrors, ({ save: "Could not save wallpaper settings. Try again." }))
       root.editorRevision++
     }
@@ -340,7 +392,7 @@ Item {
     onTriggered: if (!monitorMetadataProc.running) monitorMetadataProc.running = true
   }
 
-  IpcHandler {
+  ShellIpc {
     target: "background"
 
     function refresh(): void {
@@ -355,6 +407,10 @@ Item {
       root.setBackground(path, true)
     }
 
+    function setSuspended(value: string): void {
+      root.setSuspended(value === "true")
+    }
+
     function transition(fromPath: string, path: string): void {
       root.transitionBackground(fromPath, path, path, false, false)
     }
@@ -362,11 +418,30 @@ Item {
     function themeTransition(fromPath: string, path: string, finalPath: string, colorsB64: string, shellB64: string): void {
       root.transitionBackgroundWithTheme(fromPath, path, finalPath, colorsB64, shellB64)
     }
+
+    function prepare(path: string): void {
+    }
+
     function editorState(): string { return root.editorState() }
     function previewMonitor(monitor: string, recordJson: string): void { root.previewMonitor(monitor, recordJson) }
     function cancelPreview(): void { root.cancelEditorPreview() }
     function saveMonitor(monitor: string, recordJson: string): void { root.saveMonitor(monitor, recordJson) }
     function openEditor(): void { root.openEditor() }
+  }
+  Timer {
+    id: videoHandoffTimer
+    interval: 600
+    repeat: false
+    onTriggered: {
+      if (root.isVideo(root.currentBackground) && root.displayedBackground !== root.currentBackground) {
+        revealAnimation.stop()
+        root.finishingTransition = false
+        root.oldBackground = ""
+        root.incomingBackground = ""
+        root.displayedBackground = root.currentBackground
+        root.revealProgress = 1
+      }
+    }
   }
   Timer {
     id: editorPreviewTimer
@@ -394,7 +469,8 @@ Item {
     onFinished: {
       if (root.incomingBackground) {
         root.finishingTransition = true
-        root.displayedBackground = root.currentBackground || root.incomingBackground
+        root.displayedBackground = root.currentBackground && !root.isVideo(root.currentBackground)
+          ? root.currentBackground : root.incomingBackground
       }
       root.revealProgress = 1
     }
@@ -407,6 +483,7 @@ Item {
   }
 
   Variants {
+    id: backgrounds
     model: Quickshell.screens
 
     PanelWindow {
@@ -430,6 +507,7 @@ Item {
       updatesEnabled: true
 
       property bool maskReady: false
+      property int readyFrames: 0
       readonly property string monitorName: String(modelData.name || "")
 
       readonly property var currentWallpaperRecord: root.recordForScreen(monitorName)
@@ -440,7 +518,16 @@ Item {
       readonly property string oldWallpaperPath: root.backgroundForScreen(monitorName, root.oldBackground)
       readonly property string incomingWallpaperPath: root.backgroundForScreen(monitorName, root.incomingBackground)
       readonly property bool wallpaperUnavailable: !!currentWallpaperRecord.image && root.editorUnavailable[monitorName] === currentWallpaperRecord.image && !usingLastGood
+      readonly property bool hasCustomWallpaper: !!wallpaperRecord.image && !wallpaperUnavailable && !root.isVideo(wallpaperPath)
+      readonly property bool passThroughVideo: base.video || (root.suspended && !hasCustomWallpaper)
       readonly property bool needsPreparedImage: !usingLastGood && (wallpaperRecord.image || wallpaperRecord.rotation !== 0)
+      readonly property bool backgroundReady: base.video || (base.imageReady && readyFrames >= 2)
+
+      FrameAnimation {
+        running: base.imageReady && panel.readyFrames < 2
+        onTriggered: panel.readyFrames += 1
+      }
+      onWallpaperPathChanged: readyFrames = 0
 
       function maybeStartReveal() {
         if (!root.incomingBackground || root.revealProgress !== 0 || maskReady) return
@@ -466,6 +553,7 @@ Item {
       WallpaperFrame {
         id: base
         anchors.fill: parent
+        visible: !panel.passThroughVideo
         originalSource: panel.needsPreparedImage && !panel.wallpaperUnavailable ? panel.wallpaperPath : ""
         source: panel.needsPreparedImage && !panel.wallpaperUnavailable ? "" : panel.wallpaperPath
         allowRawFallback: !panel.wallpaperRecord.image
@@ -495,14 +583,14 @@ Item {
         canvasHeight: panel.canvas.height
         record: panel.wallpaperRecord
         asynchronous: true
-        visible: root.oldBackground !== "" && root.revealProgress < 1
+        visible: !panel.passThroughVideo && root.oldBackground !== "" && root.revealProgress < 1
         onReady: panel.maybeStartReveal()
       }
 
       Item {
         id: incomingLayer
         anchors.fill: parent
-        visible: root.incomingBackground !== "" && incomingFrame.imageReady && (root.revealProgress >= 1 || panel.maskReady)
+        visible: !panel.passThroughVideo && root.incomingBackground !== "" && incomingFrame.imageReady && (root.revealProgress >= 1 || panel.maskReady)
         layer.enabled: root.incomingBackground !== "" && root.revealProgress < 1
         layer.smooth: true
         layer.effect: MultiEffect {

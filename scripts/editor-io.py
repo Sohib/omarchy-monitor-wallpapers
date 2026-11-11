@@ -6,6 +6,9 @@ MAX_BYTES = 65536
 CONFIG = os.path.join(os.environ.get("HOME", ""), ".config/omarchy/background-editor.json")
 BASE = os.path.dirname(CONFIG)
 CACHE = os.path.join(os.environ.get("HOME", ""), ".cache/omarchy/wallpaper-editor")
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+VIDEO_EXTENSIONS = {".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi"}
+ALLOWED_EXTENSIONS = IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
 
 def fail(message):
     print("editor-io: " + str(message), file=sys.stderr)
@@ -66,9 +69,8 @@ def write_config(payload):
     print('{"ok":true}')
     return 0
 
-def images(directory):
+def scan_media(directory, allowed):
     if os.path.islink(directory) or not os.path.isdir(directory): raise ValueError("not a readable directory")
-    allowed = {".png", ".jpg", ".jpeg", ".webp"}
     result = []
     with os.scandir(directory) as entries:
         for entry in entries:
@@ -77,7 +79,10 @@ def images(directory):
                     result.append(os.path.abspath(entry.path))
             except OSError: pass
     result.sort(key=lambda p: (os.path.basename(p).casefold(), p))
-    print(json.dumps(result, ensure_ascii=False))
+    return result
+
+def images(directory):
+    print(json.dumps(scan_media(directory, ALLOWED_EXTENSIONS), ensure_ascii=False))
     return 0
 
 def cache_paths():
@@ -153,51 +158,106 @@ def update_lease(owner, payload):
     print('{"ok":true}')
     return 0
 
+def extract_video_frame(canonical, destination):
+    if shutil.which("ffmpegthumbnailer"):
+        proc = subprocess.run(["ffmpegthumbnailer", "-i", canonical, "-o", destination, "-s", "0", "-q", "10", "-c", "png"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        if proc.returncode == 0 and os.path.isfile(destination) and os.path.getsize(destination) > 0:
+            return
+    if shutil.which("ffmpeg"):
+        proc = subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", canonical, "-frames:v", "1", destination], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        if proc.returncode == 0 and os.path.isfile(destination) and os.path.getsize(destination) > 0:
+            return
+    raise ValueError("Video thumbnailer is unavailable; expected ffmpegthumbnailer or ffmpeg")
+
 def prepare(path, rotation, owner="", previous=""):
     if not os.path.isabs(path) or rotation not in (0, 90, 180, 270): raise ValueError("invalid prepare arguments")
     if not shutil.which("magick") or not shutil.which("identify"):
         raise ValueError("ImageMagick is unavailable; expected magick and identify")
     lock_fd, fcntl = cache_lock()
     try:
-        return prepare_locked(path, rotation, owner, previous)
+        info = prepare_locked(path, rotation, owner, previous)
+        print(json.dumps(info))
+        return 0
     finally:
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         os.close(lock_fd)
 
-def prepare_locked(path, rotation, owner="", previous=""):
+def prepare_locked(path, rotation, owner="", previous="", prune=True):
     canonical = os.path.realpath(path)
     st = os.stat(canonical, follow_symlinks=False)
     if not stat.S_ISREG(st.st_mode) or not os.access(canonical, os.R_OK): raise ValueError("image is not a readable regular file")
+    is_video = os.path.splitext(canonical)[1].lower() in VIDEO_EXTENSIONS
     key = hashlib.sha256((canonical + "\0%d\0%d\0%d" % (st.st_size, st.st_mtime_ns, rotation)).encode()).hexdigest()
     target = os.path.join(CACHE, key + ".png")
     if not os.path.isfile(target):
         fd, tmp = tempfile.mkstemp(dir=CACHE, prefix=".prepare.", suffix=".png"); os.close(fd)
+        frame_tmp = None
         try:
-            transform = {0: [], 90: ["-rotate", "90"], 180: ["-rotate", "180"], 270: ["-rotate", "-90"]}[rotation]
-            subprocess.run(["magick", canonical + "[0]", "-auto-orient"] + transform + ["+repage", tmp], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            source_arg = canonical + "[0]"
+            if is_video:
+                if rotation == 0 and shutil.which("ffmpegthumbnailer"):
+                    extract_video_frame(canonical, tmp)
+                    source_arg = None
+                else:
+                    frame_fd, frame_tmp = tempfile.mkstemp(dir=CACHE, prefix=".frame.", suffix=".png"); os.close(frame_fd)
+                    extract_video_frame(canonical, frame_tmp)
+                    source_arg = frame_tmp + "[0]"
+            if source_arg is not None:
+                transform = {0: [], 90: ["-rotate", "90"], 180: ["-rotate", "180"], 270: ["-rotate", "-90"]}[rotation]
+                subprocess.run(["magick", source_arg, "-auto-orient"] + transform + ["+repage", tmp], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             os.replace(tmp, target)
         except Exception:
             try: os.unlink(tmp)
             except OSError: pass
             raise
+        finally:
+            if frame_tmp:
+                try: os.unlink(frame_tmp)
+                except OSError: pass
     identify = subprocess.run(["identify", "-format", "%w %h", target], check=True, capture_output=True, text=True)
     width, height = map(int, identify.stdout.split())
     os.utime(target, None)
     if owner: write_lease(owner, [target, previous])
-    protected = cache_paths()
-    protected.add(target)
-    prune_cache(protected)
-    print(json.dumps({"path": target, "width": width, "height": height}))
-    return 0
+    if prune:
+        protected = cache_paths()
+        protected.add(target)
+        prune_cache(protected)
+    return {"path": target, "width": width, "height": height}
+
+def thumbnails(directory):
+    videos = scan_media(directory, VIDEO_EXTENSIONS)
+    if not videos:
+        print('{"thumbnails":{},"unreadable":[]}')
+        return 0
+    if not shutil.which("magick") or not shutil.which("identify"):
+        raise ValueError("ImageMagick is unavailable; expected magick and identify")
+    lock_fd, fcntl = cache_lock()
+    try:
+        result = {}
+        unreadable = []
+        for video_path in videos:
+            try:
+                info = prepare_locked(video_path, 0, prune=False)
+                result[video_path] = info["path"]
+            except Exception:
+                unreadable.append(video_path)
+        protected = cache_paths() | set(result.values())
+        prune_cache(protected)
+        print(json.dumps({"thumbnails": result, "unreadable": unreadable}, ensure_ascii=False))
+        return 0
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
 
 def main(argv):
     try:
         if len(argv) == 2 and argv[1] == "read": return read_config()
         if len(argv) == 3 and argv[1] == "write": return write_config(argv[2])
         if len(argv) == 3 and argv[1] == "images": return images(argv[2])
+        if len(argv) == 3 and argv[1] == "thumbnails": return thumbnails(argv[2])
         if len(argv) in (4, 6) and argv[1] == "prepare": return prepare(argv[2], int(argv[3]), argv[4] if len(argv) == 6 else "", argv[5] if len(argv) == 6 else "")
         if len(argv) == 4 and argv[1] == "lease": return update_lease(argv[2], argv[3])
-        return fail("usage: editor-io.py read | write <json> | images <directory> | prepare <absolute-path> <rotation> [owner previous-path] | lease <owner> <json-path-array>")
+        return fail("usage: editor-io.py read | write <json> | images <directory> | thumbnails <directory> | prepare <absolute-path> <rotation> [owner previous-path] | lease <owner> <json-path-array>")
     except Exception as error: return fail(error)
 
 if __name__ == "__main__": sys.exit(main(sys.argv))
